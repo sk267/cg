@@ -1,0 +1,162 @@
+import pymel.core as pm
+
+class CreateIkStretch():
+    win = None
+
+    def __init__(self, *args):
+        self.globalControlLayout = None
+        self.tFBG = None
+        self.gui()
+
+    def gui(self, *args):
+
+        if CreateIkStretch.win is not None:
+            try:
+                pm.deleteUI(CreateIkStretch.win)
+            except RuntimeError:
+                pass
+
+        with pm.window(
+            menuBar=True, menuBarVisible=True,
+            width=200, title='Create Ik Stretch'
+        ) as w:
+            CreateIkStretch.win = w
+
+            with pm.columnLayout(rowSpacing=5, width=500):
+                pm.text('select two joints')
+                pm.button(label='Excecute', command=pm.Callback(self.excecute))
+                self.checkBox = pm.checkBox(
+                    enable=True, label='Maintain Scale',
+                    changeCommand=pm.Callback(self.toggleCheckbox)
+                )
+            with pm.columnLayout(rowSpacing=5, width=500, enable=False) as self.globalControlLayout:
+                self.sTFBG = pm.textFieldButtonGrp(
+                    label='Load Main Controller: ', buttonLabel='Load Controller',
+                )
+
+    def toggleCheckbox(self, *args):
+        print('toggleCheckbox')
+
+    def excecute(self, *args):
+
+        startJoint = None
+        endJoint = None
+        joints = pm.ls(os=True)
+        # Start und Endjoint herausfinden
+
+        # joints[0].listRelatives(allDescendents=True, children=True, type='joint')
+
+#         if j[0] in j[1].listRelatives(allDescendents=True, children=True, type='joint'):
+#     print j[0].name() + 'ist Kind'
+#           else:
+#     print j[1].name() + 'ist Kind'
+
+        pm.select(joints[0])
+        childCountJoint1 = pm.ls(pm.listRelatives(allDescendents=True, children=True, type='joint'))
+        pm.select(joints[1])
+        childCountJoint2 = pm.ls(pm.listRelatives(allDescendents=True, children=True, type='joint'))
+
+        children = None
+
+        if len(childCountJoint1) < len(childCountJoint2):
+            children = childCountJoint2
+            startJoint = joints[1]
+            endJoint = joints[0]
+        else:
+            children = childCountJoint1
+            startJoint = joints[0]
+            endJoint = joints[1]
+
+
+
+        # alternativer Weg, um start und endjoint herauszufinden und eine jointList zu erstellen, die vom Start Joint 
+        # bis einschließlich zum Endjoint reicht:
+
+        # if j[0] in j[1].listRelatives(allDescendents=True, children=True, type='joint'):
+        #     startJoint, endJoint = j[1], j[0]
+        # else:
+        #     startJoint, endJoint = j[0], j[1]
+        # jointList = startJoint.listRelatives(allDescendents=True, children=True, type='joint')
+        # jointList.reverse()
+        # jointList = jointList[0:jointList.index(endJoint)+1]
+        # jointList.insert(0, startJoint)
+        # print(jointList)
+
+        # um das erste bzw. das letzte element einer Liste wegzulassen kann z.B. folgende Notation verwendet werden:
+        # print(jointList[:-1])
+
+        startLoc = pm.spaceLocator(name='startLoc')
+        endLoc = pm.spaceLocator(name='endLoc')
+
+        # startLoc.getTranslation(worldSpace=True)!!
+
+        pm.xform(
+            startLoc.name(), t=pm.xform(startJoint.name(), worldSpace=True, query=True, t=True)
+        )
+        pm.xform(
+            endLoc.name(), t=pm.xform(endJoint.name(), worldSpace=True, query=True, t=True)
+        )
+
+        pm.select(startJoint.name())
+        pm.select(endJoint.name(), add=True)
+
+        ikHandle = pm.ikHandle()[0]
+
+        pm.select(ikHandle.name())
+        pm.select(endLoc.name(), add=True)
+        pm.parent()
+
+        distanceBetween = pm.createNode('distanceBetween')
+
+        pm.listRelatives(startLoc, shapes=True)[0].worldMatrix[0] >> distanceBetween.inMatrix1
+        pm.listRelatives(endLoc, shapes=True)[0].worldMatrix[0] >> distanceBetween.inMatrix2
+
+        multiplyDivide = pm.createNode('multiplyDivide')
+        multiplyDivide.setAttr('operation', 2)
+        distanceBetween.distance >> multiplyDivide.input1.input1X
+
+        translateAxis = ['tx', 'ty', 'tz']
+        scaleAxis = ['scaleX', 'scaleY', 'scaleZ']
+
+        relevantAxis = None
+        relevantScale = None
+
+        for i in range(3):
+            if pm.getAttr('{}.{}'.format(endJoint.name(), translateAxis[i])) > 0.00001:
+                relevantAxis = translateAxis[i]
+                relevantScale = scaleAxis[i]
+
+        # initiale Distanz ausrechnen, durch die dann dividiert werden kann
+
+        initialDistance = 0
+        children.reverse()
+
+        for i in range(len(children)):
+            initialDistance += pm.getAttr('{}.{}'.format(children[i].name(), relevantAxis))
+            if children[i].name() == endJoint.name():
+                print('if betreten')
+                break
+
+        multiplyDivide.setAttr('input2.input2X', initialDistance)
+        clamp = pm.createNode('clamp')
+        multiplyDivide.output.outputX >> clamp.input.inputR
+
+        clamp.setAttr('min.minR', 1)
+        clamp.setAttr('max.maxR', 5)
+
+        # skalierungswert auf die Joints geben
+
+        children = children[0:-1]
+
+        for obj in children:
+
+            act = pm.listRelatives(obj.name(), parent=True)[0].name()
+            print(act)
+
+            pm.connectAttr(
+                '{}.output.outputR'.format(clamp.name()),
+                '{}.scale.{}'.format(act, relevantScale)
+            )
+
+
+CreateIkStretch()
