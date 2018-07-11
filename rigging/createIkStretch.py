@@ -77,9 +77,7 @@ class CreateIkStretch():
 
         ikHandle = pm.ikHandle()[0]
 
-        pm.select(ikHandle.name())
-        pm.select(endLoc.name(), add=True)
-        pm.parent()
+        pm.parent(ikHandle, endLoc)
 
         distanceBetween = pm.createNode('distanceBetween')
 
@@ -94,6 +92,8 @@ class CreateIkStretch():
             multiplyDivide = pm.createNode('multiplyDivide')
             multiplyDivide.setAttr('operation', 2)
             scaleCompensateMultDiv.output.outputX >> multiplyDivide.input1.input1X
+
+            pm.parent([startLoc, endLoc], self.mainCtrl)
 
         else:
             multiplyDivide = pm.createNode('multiplyDivide')
@@ -122,7 +122,8 @@ class CreateIkStretch():
         multiplyDivide.output.outputX >> clamp.input.inputR
 
         clamp.setAttr('min.minR', 1)
-        clamp.setAttr('max.maxR', 5)
+        pm.addAttr(endLoc.name(), ln='maxClamp', type='float', k=1, min=1, defaultValue=5)
+        endLoc.maxClamp >> clamp.max.maxR
 
         # skalierungswert auf die Joints geben
         for obj in jointList[:-1]:

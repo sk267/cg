@@ -30,3 +30,6 @@ class HashToNumberClass():
                 pm.text(label='Type in the name pattern:')
                 self.nameField = pm.textField(width=150)
                 pm.button(label="Enter", command=pm.Callback(self.hashToNumberCall))
+
+
+HashToNumberClass()
